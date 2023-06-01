@@ -1,0 +1,120 @@
+version: '3'
+services:
+  mongo-source:
+    image: mongo
+    container_name: mongo-source
+    networks:
+      - mongodb_task1_my-network
+    restart: always
+    volumes:
+      - ./mongo-source/data:/data/db
+    ports:
+      - 27017:27017
+    volumes:
+      - ./mongo-source/data:/data/db
+  mongo-target:
+    image: mongo
+    container_name: mongo-target
+    restart: always
+    ports:
+      - 27018:27017
+    volumes:
+      - ./mongo-target/data:/data/db
+    networks:
+      - mongodb_task1_my-network
+  zookeeper:
+    image: confluentinc/cp-zookeeper
+    container_name: zookeeper
+    networks:
+      - mongodb_task1_my-network
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+    ports:
+      - '2181:2181'
+
+  kafka:
+    image: confluentinc/cp-kafka
+    container_name: kafka
+    networks:
+      - mongodb_task1_my-network
+    environment:
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=false
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+    ports:
+      - 9092:9092
+    depends_on:
+      - zookeeper
+
+  kafka-connect:
+    image: confluentinc/cp-kafka-connect
+    container_name: kafka-connect
+    networks:
+      - mongodb_task1_my-network
+    environment:
+      - CONNECT_BOOTSTRAP_SERVERS=kafka:9092
+      - CONNECT_REST_ADVERTISED_HOST_NAME=kafka-connect
+      - CONNECT_GROUP_ID=kafka-connect-group
+      - CONNECT_CONFIG_STORAGE_TOPIC=my-connect-configs
+      - CONNECT_OFFSET_STORAGE_TOPIC=my-connect-offsets
+      - CONNECT_STATUS_STORAGE_TOPIC=my-connect-statuses
+      - CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR=1
+      - CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR=1
+      - CONNECT_STATUS_STORAGE_REPLICATION_FACTOR=1
+      - CONNECT_KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE=false
+      - CONNECT_VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE=false
+      - CONNECT_INTERNAL_KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - CONNECT_INTERNAL_KEY_CONVERTER_SCHEMAS_ENABLE=false
+      - CONNECT_INTERNAL_VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - CONNECT_INTERNAL_VALUE_CONVERTER_SCHEMAS_ENABLE=false
+      - CONNECT_REST_PORT=8083
+      - CONNECT_PLUGIN_PATH=/usr/share/java,/etc/kafka-connect/jars
+      - CONNECTOR_NAME=mongodb-source-connector
+      - CONNECTOR_CLASS=com.mongodb.kafka.connect.MongoSourceConnector
+      - CONNECTOR_TASKS_MAX=1
+      - CONNECTOR_MONGODB_URI=mongodb://mongo-source:27017
+      - CONNECTOR_MONGODB_DATABASE=source
+      - CONNECTOR_MONGODB_COLLECTION=users
+      - CONNECTOR_TOPICS_PREFIX=mongodb-source
+    volumes:
+      - ./connect-config:/etc/kafka-connect
+      - ./connect-plugins:/etc/kafka-connect/jars
+    ports:
+      - 8083:8083
+    depends_on:
+      - kafka
+      - zookeeper
+      - mongo-source
+
+  mongo-target:
+    image: mongo
+    container_name: mongo-target
+    networks:
+      - mongodb_task1_my-network
+    restart: always
+    volumes:
+      - ./mongo-target/data:/data/db
+    ports:
+      - 27018:27017
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    networks:
+      mongodb_task1_my-network:
+    ports:
+      - 3030:8080
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_REST_PROXY_URL=http://kafka:8082
+      - KAFKA_CONNECT_URL=http://kafka-connect:8083
+      - LENSES_PORT=3030
+    depends_on:
+      - kafka
+      - kafka-connect
+
+networks:
+  mongodb_task1_my-network:
